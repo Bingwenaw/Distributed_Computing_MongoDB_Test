@@ -1,0 +1,42 @@
+name: mongo-local-lab
+
+services:
+  mongo1:
+    image: mongo:7.0.40
+    command: ["mongod","--replSet","rs0","--bind_ip_all","--oplogSize","256"]
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "quit(db.adminCommand('ping').ok ? 0 : 1)"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    ports: ["127.0.0.1:27017:27017"]
+    volumes: ["mongo1:/data/db"]
+    networks: [mongo-lab]
+  mongo2:
+    image: mongo:7.0.40
+    command: ["mongod","--port","27018","--replSet","rs0","--bind_ip_all","--oplogSize","256"]
+    healthcheck:
+      test: ["CMD", "mongosh", "--port", "27018", "--quiet", "--eval", "quit(db.adminCommand('ping').ok ? 0 : 1)"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    ports: ["127.0.0.1:27018:27018"]
+    volumes: ["mongo2:/data/db"]
+    networks: [mongo-lab]
+  mongo3:
+    image: mongo:7.0.40
+    command: ["mongod","--port","27019","--replSet","rs0","--bind_ip_all","--oplogSize","256"]
+    healthcheck:
+      test: ["CMD", "mongosh", "--port", "27019", "--quiet", "--eval", "quit(db.adminCommand('ping').ok ? 0 : 1)"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    ports: ["127.0.0.1:27019:27019"]
+    volumes: ["mongo3:/data/db"]
+    networks: [mongo-lab]
+networks:
+  mongo-lab: {}
+volumes:
+  mongo1: {}
+  mongo2: {}
+  mongo3: {}
