@@ -4,7 +4,6 @@ from contextlib import ExitStack
 import json
 from pathlib import Path
 import subprocess
-import shutil
 import sys
 import tempfile
 import threading
@@ -41,10 +40,9 @@ class LinkedChecks(unittest.TestCase):
         self.base = Path(self.temp.name)
         self.stack = ExitStack()
         self.stack.enter_context(patch.multiple(config, ROOT=self.base,
-            SETTINGS=self.base / 'secrets/laptop.json', TEAM=self.base / 'secrets/team.json'))
-        self.team = config.create_team()
+            SETTINGS=self.base / 'secrets/laptop.json'))
         self.addresses = dict(A='192.168.43.10', B='192.168.43.11', C='192.168.43.12')
-        config.save_settings('A', self.addresses, self.team)
+        config.save_settings('A', self.addresses)
         self.cluster = config.load_linked()
         self.dashboards = []
 
@@ -69,7 +67,7 @@ class LinkedChecks(unittest.TestCase):
         self.assertEqual(sum(m['votes'] for m in self.cluster.members()), 7)
         self.assertEqual([m['_id'] for m in self.cluster.members() if not m['votes']], [5, 8])
         for owner in 'ABC':
-            cluster = Cluster(True, owner, self.addresses, self.team)
+            cluster = Cluster(True, owner, self.addresses)
             rendered = config.render_linked(cluster)
             self.assertEqual(set(rendered['services']), set(cluster.local_nodes))
             for node, service in rendered['services'].items():
@@ -77,25 +75,30 @@ class LinkedChecks(unittest.TestCase):
                 self.assertNotIn(cluster.nodes[node][0], service['extra_hosts'])
                 self.assertIn(cluster.nodes[node][0], service['networks']['mongo-lab']['aliases'])
                 self.assertTrue(service['ports'][0].startswith(self.addresses[owner] + ':'))
-                self.assertNotIn(self.team['password'], json.dumps(rendered))
+                self.assertNotIn('--keyFile', service['command'])
+                self.assertNotIn('--auth', service['command'])
+                self.assertEqual(service['volumes'], [f'{node}:/data/db'])
+                self.assertNotIn('entrypoint', service)
+                self.assertEqual(cluster.auth, {})
             # Parse using the real Compose CLI; this does not contact Docker or start containers.
             result = subprocess.run([*cluster.compose, 'config', '--format', 'json'],
                                     capture_output=True, text=True, timeout=10)
             self.assertEqual(result.returncode, 0, result.stderr)
             expanded = json.loads(result.stdout)
             self.assertEqual(set(expanded['services']), set(cluster.local_nodes))
+            for node, service in expanded['services'].items():
+                self.assertEqual(service['command'][0], 'mongod')
+                self.assertEqual(service['command'][2], str(cluster.nodes[node][1]))
         self.assertNotEqual(LOCAL.project, 'mongo-local-lab')
         self.assertTrue(all(port >= 28017 for _, port in LOCAL.nodes.values()))
 
     def test_invalid_settings_and_existing_cluster_rejected(self):
         with self.assertRaises(ValueError):
-            config.save_settings('B', self.addresses, self.team)
+            config.save_settings('B', self.addresses)
         with self.assertRaises(ValueError):
-            config.save_settings('A', {**self.addresses, 'C': self.addresses['A']}, self.team)
+            config.save_settings('A', {**self.addresses, 'C': self.addresses['A']})
         with self.assertRaises(ValueError):
-            config.save_settings('A', {**self.addresses, 'A': '127.0.0.1'}, self.team)
-        with self.assertRaises(ValueError):
-            config.validate_team({**self.team, 'key': 'not-a-key'})
+            config.save_settings('A', {**self.addresses, 'A': '127.0.0.1'})
         expected = dict(_id=self.cluster.name, members=self.cluster.members())
         validate_config(expected, self.cluster)
         expected['members'][5]['votes'] = 1
@@ -120,13 +123,13 @@ class LinkedChecks(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             control.check_labels(data, LOCAL)
 
-    def test_bootstrap_is_pending_but_another_team_is_rejected(self):
+    def test_legacy_bootstrap_is_pending_but_wrong_node_is_rejected(self):
         initial = dict(_id=self.cluster.name, members=self.cluster.members(bootstrap=True))
         with patch('setup_lab.direct') as direct:
             client = direct.return_value.__enter__.return_value
             client.admin.command.side_effect = [{'isWritablePrimary': True}, {'config': initial}]
             self.assertFalse(ready(self.cluster))
-            initial['members'][0]['tags']['team'] = 'another-team'
+            initial['members'][0]['tags']['node'] = 'wrong-node'
             client.admin.command.side_effect = [{'isWritablePrimary': True}, {'config': initial}]
             with self.assertRaises(RuntimeError):
                 ready(self.cluster)
@@ -203,25 +206,57 @@ class LinkedChecks(unittest.TestCase):
             d.jobs['connection'].result(timeout=3)
             self.assertEqual(d.connection_state, 'disconnected')
 
-    @unittest.skipUnless(shutil.which('node'), 'Optional JS bootstrap check needs Node.js')
-    def test_bootstrap_javascript_accepts_auth_return_values_and_resumes(self):
-        from link_setup import USER_SETUP
-        script = USER_SETUP.replace('ADMIN_PASSWORD', '"admin-test"').replace('APP_PASSWORD', '"app-test"')
-        for object_result in (False, True):
-            for initial in ([], ['setup'], ['setup', 'lab']):
-                shim = "const users=new Set(" + json.dumps(initial) + ");\n"
-                shim += """
-const admin={
-  auth(user,pwd) { if (!users.has(user)) throw Error('Not authenticated'); return AUTH_RESULT; },
-  createUser(doc) { if(users.has(doc.user)) throw Error('Duplicate user'); users.add(doc.user); },
-  getUser(user) { return users.has(user) ? {user} : null; }
-};
-const db={getSiblingDB:()=>admin};
-function quit(code) { process.exit(code || (users.has('setup') && users.has('lab') ? 0 : 9)); }
-""".replace('AUTH_RESULT', '{ok:1}' if object_result else '1')
-                result = subprocess.run([shutil.which('node'), '-'], input=shim + script,
-                                        capture_output=True, text=True, timeout=5, cwd=ROOT)
-                self.assertEqual(result.returncode, 0, result.stderr)
+    def test_settings_ignore_legacy_credentials_and_preserve_old_tags(self):
+        self.assertFalse((self.base / 'secrets/team.json').exists())
+        legacy = self.base / 'secrets/team.json'
+        legacy.write_text('old credentials are deliberately not parsed')
+        self.assertEqual(config.load_linked().auth, {})
+        self.assertEqual(legacy.read_text(), 'old credentials are deliberately not parsed')
+        current = dict(_id=self.cluster.name, members=self.cluster.members())
+        for member in current['members']:
+            member['tags']['team'] = 'old-team'
+        validate_config(current, self.cluster)
+        current['members'][0]['host'] = 'another-host:29017'
+        with self.assertRaises(RuntimeError):
+            validate_config(current, self.cluster)
+
+    def test_initialization_reports_errors_and_reuses_existing_configuration(self):
+        from pymongo.errors import OperationFailure
+        from link_setup import bootstrap
+        cancel = threading.Event()
+        with patch('link_setup.direct') as direct:
+            command = direct.return_value.__enter__.return_value.admin.command
+            command.side_effect = [OperationFailure('not initialized', code=94), {'ok': 1}]
+            bootstrap(self.cluster, cancel)
+            self.assertEqual(command.call_args.args,
+                ('replSetInitiate', {'_id': self.cluster.name, 'members': self.cluster.members()}))
+            command.reset_mock()
+            command.side_effect = [OperationFailure('not initialized', code=94),
+                                   OperationFailure('peer refused initialization', code=74)]
+            with self.assertRaisesRegex(OperationFailure, 'peer refused'):
+                bootstrap(self.cluster, cancel)
+            command.reset_mock()
+            command.side_effect = [{'config': {'_id': self.cluster.name, 'members': self.cluster.members()}}]
+            bootstrap(self.cluster, cancel)
+            command.assert_called_once_with('replSetGetConfig')
+
+    def test_connection_setup_saves_without_team_upload(self):
+        from streamlit.testing.v1 import AppTest
+        import streamlit as st
+        d = self.dashboard()
+        self.stack.enter_context(patch('dashboard_state.Dashboard', return_value=d))
+        self.stack.enter_context(patch.object(d, 'refresh_status'))
+        st.cache_resource.clear()
+        app = AppTest.from_file(str(ROOT / 'scripts/app.py'), default_timeout=10).run()
+        self.assertFalse(app.exception, app.exception)
+        self.assertFalse(any('team file' in b.label.lower() for b in app.button))
+        for owner, address in self.addresses.items():
+            next(t for t in app.text_input if t.label == f'Laptop {owner} hotspot IPv4').set_value(address)
+        next(b for b in app.button if b.label == 'Save connection settings').click().run()
+        self.assertFalse(app.exception, app.exception)
+        self.assertEqual(config.load_linked().addresses, self.addresses)
+        self.assertFalse((self.base / 'secrets/team.json').exists())
+        st.cache_resource.clear()
 
     def test_shared_ui_shows_nine_nodes_and_limits_controls(self):
         from streamlit.testing.v1 import AppTest
@@ -253,5 +288,79 @@ function quit(code) { process.exit(code || (users.has('setup') && users.has('lab
         st.cache_resource.clear()
 
 
+def live_startup_check():
+    """Temporary three-member smoke test; no real laptop settings or volumes are used."""
+    from uuid import uuid4
+    from pymongo import MongoClient, ReadPreference
+    from pymongo.write_concern import WriteConcern
+    from link_setup import bootstrap
+    from setup_lab import wait_for
+    project = 'linked-noauth-check-' + uuid4().hex[:10]
+
+    class TestCluster(Cluster):
+        @property
+        def nodes(self):
+            return dict(list(super().nodes.items())[:3])
+
+        @property
+        def project(self):
+            return project
+
+    with tempfile.TemporaryDirectory(prefix='live-check-', dir=ROOT) as temp, \
+         patch.object(config, 'ROOT', Path(temp)):
+        cluster = TestCluster(True, 'A', dict(A='192.168.43.10', B='192.168.43.11', C='192.168.43.12'))
+        rendered = config.render_linked(cluster)
+        for node, service in rendered['services'].items():
+            port = cluster.nodes[node][1]
+            service['ports'] = [f'127.0.0.1:0:{port}']
+            service['command'] += ['--wiredTigerCacheSizeGB', '0.25']
+        cluster.compose_file.write_text(json.dumps(rendered))
+        def docker(*args):
+            result = subprocess.run([*cluster.compose, *args], capture_output=True, text=True, timeout=90)
+            if result.returncode:
+                raise RuntimeError(result.stderr or result.stdout)
+            return result.stdout
+        ports = {}
+        def direct(node, cluster=cluster):
+            return MongoClient('127.0.0.1', ports[node], directConnection=True,
+                               serverSelectionTimeoutMS=1000, socketTimeoutMS=15000,
+                               read_preference=ReadPreference.NEAREST)
+        def ping(node):
+            with direct(node) as client:
+                return client.admin.command('ping')['ok']
+        def replicated():
+            for node in cluster.nodes:
+                with direct(node) as client:
+                    if client.friends_demo.checks.find_one({'_id': project}) is None:
+                        return False
+            return True
+        try:
+            for restart in (False, True):
+                docker('up', '-d')
+                for node, (_, port) in cluster.nodes.items():
+                    ports[node] = int(docker('port', node, str(port)).strip().rsplit(':', 1)[1])
+                    wait_for(lambda node=node: ping(node), node, seconds=40)
+                with patch('link_setup.direct', direct), patch('setup_lab.direct', direct):
+                    bootstrap(cluster, threading.Event())
+                    wait_for(lambda: ready(cluster), 'temporary replica set', seconds=45)
+                if not restart:
+                    for node in cluster.nodes:
+                        with direct(node) as client:
+                            if client.admin.command('hello').get('isWritablePrimary'):
+                                client.friends_demo.get_collection('checks', write_concern=WriteConcern('majority')).insert_one(
+                                    {'_id': project, 'message': 'No passwords needed'})
+                                break
+                wait_for(replicated, 'document on all temporary nodes', seconds=30)
+                print('Data preserved after restart.' if restart else 'No-password initialization, write and replicated reads passed.', flush=True)
+                if not restart:
+                    docker('down', '--timeout', '5')  # Keep these test volumes for restart verification.
+        finally:
+            docker('down', '--volumes', '--timeout', '5')  # Delete only this uniquely named test project.
+            print('Temporary test resources removed.', flush=True)
+
+
 if __name__ == '__main__':
-    unittest.main(verbosity=2)
+    if sys.argv[1:] == ['--docker']:
+        live_startup_check()
+    else:
+        unittest.main(verbosity=2)

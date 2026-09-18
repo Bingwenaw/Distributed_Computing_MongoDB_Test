@@ -7,7 +7,7 @@ import sys
 import streamlit as st
 
 from lab import PROPERTIES, ROOT, SOURCE, Settings, object_json, prediction
-from cluster_config import SETTINGS, TEAM, create_team, save_settings, load_linked, host_entries
+from cluster_config import SETTINGS, save_settings, load_linked, host_entries
 from experiments import SCENARIOS, run_suite, healthy
 sys.path.insert(0, str(ROOT))
 from faults.control import change, restore
@@ -170,7 +170,8 @@ def connection_panel():
     if busy and not lab.switching:
         st.caption("Finish active operations before switching. Use Stop experiments and wait for recovery first.")
     with st.expander("Connection setup · complete once on each laptop"):
-        st.write("Join the same hotspot first. A creates the team file; B and C import the same file. Each laptop must click Connect.")
+        st.write("Join the same hotspot. Select A, B, or C, enter all three IPs, and save. Each laptop must click Connect.")
+        st.warning("No passwords: anyone who can reach these database ports can read or change data. Use a trusted hotspot and test data only.")
         disabled = busy or lab.blocked or lab.cluster.linked
         try:
             saved = json.loads(SETTINGS.read_text()) if SETTINGS.exists() else {}
@@ -179,23 +180,9 @@ def connection_panel():
         laptop = st.selectbox("This laptop", ["A", "B", "C"], index=["A", "B", "C"].index(saved.get("laptop", "A")), disabled=disabled)
         addresses = {name: st.text_input(f"Laptop {name} hotspot IPv4", saved.get("addresses", {}).get(name, ""), disabled=disabled)
                      for name in "ABC"}
-        upload = st.file_uploader("Import shared team.json (B and C)", type=["json"], disabled=disabled)
-        if st.button("Create team file on A", disabled=disabled or laptop != "A" or TEAM.exists()):
-            create_team()
-            st.success("Team file created. Download it below and share privately with your two friends.")
-        if TEAM.exists():
-            st.download_button("Download private team file", TEAM.read_bytes(), file_name="team.json", mime="application/json", disabled=disabled)
         if st.button("Save connection settings", disabled=disabled):
             try:
-                if upload is not None:
-                    if upload.size > 10_000:
-                        raise ValueError("Team file is too large.")
-                    team = json.loads(upload.getvalue())
-                elif TEAM.exists():
-                    team = json.loads(TEAM.read_text())
-                else:
-                    raise ValueError("Create or import the team file first.")
-                save_settings(laptop, {name: value.strip() for name, value in addresses.items()}, team)
+                save_settings(laptop, {name: value.strip() for name, value in addresses.items()})
                 st.success("Settings saved. Check your hosts file below before connecting.")
             except Exception as exc:
                 st.error(str(exc))

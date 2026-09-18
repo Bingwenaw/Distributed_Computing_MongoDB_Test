@@ -2,13 +2,11 @@
 
 Status: **implemented as a standalone application inside this folder**. All implementation edits are confined to this folder. See [README.md](README.md) for the current setup and operation instructions.
 
-Implemented: disconnected local startup; Connect/Disconnect with cancellation and rollback; owner-specific shared Compose configuration; keyfile and application authentication; coordinator bootstrap; nine-node monitoring and routing; normal shared experiments; local fault controls; separate start/stop launchers; and offline/UI checks.
+Current update (18 September 2026): shared mode now runs **without authentication**, at the user's request. No team file, member key, or application password is required. Each person saves only their laptop letter and three IP addresses. Use a trusted private hotspot and test data only. Existing credentials are left untouched but ignored. See [setup_connection.md](setup_connection.md).
 
-Changes from this original design: local ports are **28017–28019**, shared ports **29017–29025**, and the dashboard port **8502**. Projects are `mongo-connect-local` and `mongo-connect-shared`; local replica set is `rs-local`. Shared remains `rs-linked`. `scripts/cluster_config.py` holds the fixed inventory and renders a three-service `compose.linked.json` for each owner. Settings and team credentials live under `secrets/`. This avoids conflicts with the original project and avoids maintaining a second inventory file.
+Implemented: disconnected local startup; Connect/Disconnect with cancellation and rollback; owner-specific shared Compose configuration; coordinator initialization; nine-node monitoring/routing; normal shared experiments; local fault controls; separate launchers; and offline/UI checks. Local ports are 28017–28019, shared ports 29017–29025, dashboard port 8502. Projects remain `mongo-connect-local` and `mongo-connect-shared`; replica sets remain `rs-local` and `rs-linked`.
 
-Not implemented: remote SSH fault orchestration and TLS. These remain optional extensions under the original plan. Actual three-laptop connectivity, elections, and authentication still require the hardware acceptance test; automated tests mock Docker mutations and linked startup.
-
-The historical design/checklist below is retained for context; its proposed file names, ports, and unchecked boxes are not the current implementation status.
+Not implemented: remote SSH fault orchestration and TLS. The historical design/checklist below is retained for context, including its earlier authentication proposal; it does not describe the current setup. README.md is authoritative for current behavior.
 
 Prepared on 17 September 2026 from the current project source and the official references linked below.
 

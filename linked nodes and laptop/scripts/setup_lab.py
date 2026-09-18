@@ -10,10 +10,10 @@ sys.path.insert(0, str(ROOT))
 from faults.control import command, stop_cluster, validate_compose
 
 
-def direct(node, cluster=LOCAL, authenticated=True):
+def direct(node, cluster=LOCAL):
     host, port = cluster.nodes[node]
     return MongoClient(f"mongodb://{host}:{port}/?directConnection=true",
-                       **(cluster.auth if authenticated else {}), serverSelectionTimeoutMS=1500,
+                       **cluster.auth, serverSelectionTimeoutMS=1500,
                        connectTimeoutMS=1000, socketTimeoutMS=5000)
 
 
@@ -42,9 +42,13 @@ def validate_config(current, cluster=LOCAL, bootstrap=False):
     if current.get("_id") != cluster.name or len(members) != len(expected):
         raise RuntimeError("Existing replica set does not match this lab; left unchanged.")
     for actual, wanted in zip(members, expected):
+        # Old authenticated deployments may retain this obsolete tag in their volumes.
+        # Hostnames, owners, node identities, votes and priorities must still match.
+        if cluster.linked and isinstance(actual.get("tags"), dict):
+            actual = dict(actual, tags={k: v for k, v in actual["tags"].items() if k != "team"})
         if (any(actual.get(k, 1 if k in ("votes", "priority") else None) != v for k, v in wanted.items())
                 or actual.get("arbiterOnly") or actual.get("hidden") or actual.get("secondaryDelaySecs", 0)):
-            raise RuntimeError("Unexpected member identity, team, votes, tags, or priority; left unchanged.")
+            raise RuntimeError("Unexpected member identity, votes, tags, or priority; left unchanged.")
 
 
 def ready(cluster=LOCAL):
@@ -59,7 +63,7 @@ def ready(cluster=LOCAL):
                 except RuntimeError:
                     if not cluster.linked:
                         raise
-                    # B/C can authenticate just before A enables the other candidates.
+                    # A may be upgrading the earlier single-candidate bootstrap configuration.
                     # Only the exact bootstrap configuration is a valid pending state.
                     validate_config(current, cluster, bootstrap=True)
                     return False

@@ -18,7 +18,7 @@ LOCK = threading.RLock()
 def command(args, timeout=40, *, input=None):
     result = subprocess.run(args, cwd=ROOT, capture_output=True, text=True, timeout=timeout, input=input)
     if result.returncode:
-        raise RuntimeError("MongoDB setup command failed; verify team credentials and readiness."
+        raise RuntimeError("MongoDB setup command failed; check peer connectivity and use the updated app on every laptop."
                            if input is not None else (result.stderr or result.stdout).strip())
     return result.stdout.strip()
 
