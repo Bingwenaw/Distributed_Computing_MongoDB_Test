@@ -166,9 +166,9 @@ def render_linked(cluster):
         services[node] = {
             "image": "mongo:7.0.40",
             "entrypoint": ["bash", "-ec"],
-            "command": f"install -m 400 -o mongodb -g mongodb /run/member.key /tmp/member.key; "
+            "command": [f"install -m 400 -o mongodb -g mongodb /run/member.key /tmp/member.key; "
                        f"exec /usr/local/bin/docker-entrypoint.sh mongod --port {port} "
-                       "--replSet rs-linked --bind_ip_all --oplogSize 256 --keyFile /tmp/member.key",
+                       "--replSet rs-linked --bind_ip_all --oplogSize 256 --keyFile /tmp/member.key"],
             "ports": [f"{cluster.addresses[cluster.laptop]}:{port}:{port}"],
             "volumes": [f"{node}:/data/db", {"type": "bind", "source": str(key_path),
                          "target": "/run/member.key", "read_only": True}],
