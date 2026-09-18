@@ -35,6 +35,16 @@ def state(cluster):
 
 
 class LinkedChecks(unittest.TestCase):
+    def test_startup_rejects_occupied_dashboard_port_before_docker_changes(self):
+        from setup_lab import startup
+        with patch('setup_lab.socket.socket') as socket, \
+             patch('setup_lab.stop_cluster') as stop, patch('setup_lab.setup') as setup:
+            socket.return_value.__enter__.return_value.connect_ex.return_value = 0
+            with self.assertRaisesRegex(RuntimeError, 'No Docker containers were changed'):
+                startup()
+            stop.assert_not_called()
+            setup.assert_not_called()
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(dir=ROOT)
         self.base = Path(self.temp.name)

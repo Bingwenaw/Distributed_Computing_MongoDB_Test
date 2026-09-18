@@ -104,13 +104,24 @@ def setup():
     return "Local lab ready at http://127.0.0.1:8502"
 
 
+def startup():
+    # Check before any Docker changes: another copy may already own the dashboard.
+    with socket.socket() as probe:
+        probe.settimeout(1)
+        if probe.connect_ex(("127.0.0.1", 8502)) == 0:
+            raise RuntimeError("Port 8502 is already in use. Open http://127.0.0.1:8502, "
+                               "or stop the existing dashboard before starting another copy. "
+                               "No Docker containers were changed.")
+    if SETTINGS.exists() or (ROOT / "compose.linked.json").exists():
+        stop_cluster(load_linked())
+    return setup()
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--startup", action="store_true", help="Stop this copy's leftover shared nodes first.")
     args = parser.parse_args()
     try:
-        if args.startup and (SETTINGS.exists() or (ROOT / "compose.linked.json").exists()):
-            stop_cluster(load_linked())
-        print(setup())
+        print(startup() if args.startup else setup())
     except Exception as exc:
         raise SystemExit(f"Setup stopped: {exc}\nVolumes were not deleted.")
