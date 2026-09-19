@@ -5,7 +5,7 @@ export PATH="$PATH:$HOME/.local/bin:$HOME/.docker/bin:/opt/homebrew/bin:/usr/loc
 cd -- "$(dirname -- "$0")"
 lab_root=$(pwd -P)
 
-trap 'lab_exit_code=$?; echo "Shutdown incomplete. Check the error above; database volumes were not deleted."; if [[ -t 0 ]]; then read -r -p "Press Return to close… " lab_reply; fi; exit "$lab_exit_code"' ERR
+trap 'lab_exit_code=$?; echo "Shutdown incomplete. Check the error above; some database volumes may already have been deleted."; if [[ -t 0 ]]; then read -r -p "Press Return to close… " lab_reply; fi; exit "$lab_exit_code"' ERR
 
 echo "[1/2] Stopping this project's dashboard and experiment workers…"
 lab_pids=()
@@ -51,9 +51,8 @@ if [[ ${#lab_pids[@]} -gt 0 ]]; then
     done
 fi
 
-echo "[2/2] Stopping this standalone copy's local and shared containers…"
+echo "[2/2] Removing this standalone copy's local and shared containers and deleting their database volumes…"
 export PYTHONDONTWRITEBYTECODE=1
 export UV_CACHE_DIR="$PWD/.uv-cache"
 uv run --locked scripts/shutdown.py
-echo "Lab stopped. Database volumes and results/ logs are preserved."
 echo "Next time, double-click Start Lab.command."

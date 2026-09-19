@@ -131,7 +131,7 @@ exit "$LAB_STOP_DOCKER_EXIT"
                 self.assertIsNotNone(own.returncode)
                 self.assertIsNone(other.poll(), "Another project's process must remain running.")
                 self.assertEqual(trace.read_text().splitlines(), ["run --locked scripts/shutdown.py"])
-                self.assertIn("volumes and results/ logs are preserved", result.stdout)
+                self.assertIn("deleting their database volumes", result.stdout)
                 env["LAB_STOP_PIDS"] = str(other.pid)
                 again = subprocess.run([str(stopper)], cwd=temp, env=env, stdin=subprocess.DEVNULL,
                                        capture_output=True, text=True, timeout=5)

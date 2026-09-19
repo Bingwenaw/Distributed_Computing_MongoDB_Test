@@ -4,7 +4,7 @@ from copy import deepcopy
 import json
 import socket
 import sys
-from pymongo.errors import OperationFailure
+from pymongo.errors import ConnectionFailure, OperationFailure, PyMongoError
 from cluster_config import ROOT, load_linked, render_linked
 from setup_lab import direct, wait_for, ready, validate_config
 sys.path.insert(0, str(ROOT))
@@ -29,25 +29,40 @@ def shell(cluster, node, script):
 
 
 def peers_reachable(cluster):
-    for node in cluster.nodes:
-        with direct(node, cluster) as client:
-            hello = client.admin.command("hello")
-            if hello.get("setName") not in (None, cluster.name):
-                raise RuntimeError(f"{node} belongs to a different replica set.")
+    for node, (host, port) in cluster.nodes.items():
+        endpoint = f"{node} on laptop {cluster.owner(node)} ({host}:{port})"
+        try:
+            with direct(node, cluster) as client:
+                hello = client.admin.command("hello")
+                if hello.get("setName") not in (None, cluster.name):
+                    raise RuntimeError(f"{endpoint} belongs to a different replica set.")
+                # hello also succeeds on password-protected nodes; check a privileged command.
+                client.admin.command("replSetGetConfig")
+        except OperationFailure as exc:
+            if exc.code == 94:  # A new node has no replica-set configuration yet.
+                continue
+            if exc.code in (13, 18):
+                raise RuntimeError(f"{endpoint} still requires authentication. Update and restart "
+                                   "the app on that laptop so its containers run without passwords.") from exc
+            raise
+        except PyMongoError as exc:
+            raise ConnectionFailure(f"Cannot reach {endpoint}: {exc}") from exc
     return True
 
 
 def container_connections(cluster):
-    endpoints = [f"mongodb://{host}:{port}/?directConnection=true&serverSelectionTimeoutMS=1500"
+    endpoints = [f"mongodb://{host}:{port}/?directConnection=true&serverSelectionTimeoutMS=1500&connectTimeoutMS=1500&socketTimeoutMS=3000"
                  for host, port in cluster.nodes.values()]
-    script = "try { for (const uri of " + json.dumps(endpoints) + ") { " \
+    script = "for (const uri of " + json.dumps(endpoints) + ") { try { " \
              "const r = new Mongo(uri).getDB('admin').runCommand({hello:1}); " \
-             "if (!r.ok) quit(2); } quit(0); } catch (e) { quit(2); }"
+             "if (!r.ok) throw new Error(JSON.stringify(r)); " \
+             "} catch (e) { print(uri + ': ' + e.message); quit(2); } } quit(0);"
     for node in cluster.local_nodes:
         try:
             shell(cluster, node, script)
         except RuntimeError as exc:
-            raise RuntimeError(f"{node} cannot reach all peers from Docker. Check hotspot/firewalls and IP mappings.") from exc
+            raise RuntimeError(f"{node} cannot reach all peers from Docker. "
+                               f"Check hotspot/firewalls and IP mappings. {exc}") from exc
 
 
 def bootstrap(cluster, cancel):

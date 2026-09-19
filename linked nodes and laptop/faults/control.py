@@ -11,15 +11,13 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from cluster_config import LOCAL, load_linked, render_linked
 
 COMPOSE = LOCAL.compose
-NODES = tuple(LOCAL.nodes)
 LOCK = threading.RLock()
 
 
 def command(args, timeout=40, *, input=None):
     result = subprocess.run(args, cwd=ROOT, capture_output=True, text=True, timeout=timeout, input=input)
     if result.returncode:
-        raise RuntimeError("MongoDB setup command failed; check peer connectivity and use the updated app on every laptop."
-                           if input is not None else (result.stderr or result.stdout).strip())
+        raise RuntimeError((result.stderr or result.stdout).strip())
     return result.stdout.strip()
 
 
@@ -36,10 +34,13 @@ def container(node, cluster=LOCAL):
 
 def check_labels(data, cluster):
     labels = data["Config"].get("Labels", {})
+    working_dir = labels.get("com.docker.compose.project.working_dir", "")
     if (labels.get("com.docker.compose.project") != cluster.project
             or labels.get("com.docker.compose.service") not in cluster.local_nodes
-            or Path(labels.get("com.docker.compose.project.working_dir", "")).resolve() != ROOT):
-        raise RuntimeError("Refusing to manage a container outside this standalone folder.")
+            or Path(working_dir).resolve() != ROOT):
+        raise RuntimeError(f"Refusing to manage a container outside this standalone folder. "
+                           f"Container folder: {working_dir or 'unknown'}; this folder: {ROOT}. "
+                           "Start the app from that folder, or stop its containers there before switching copies.")
 
 
 def network(cluster=LOCAL):
@@ -117,13 +118,14 @@ def validate_compose(cluster):
     return config
 
 
-def stop_cluster(cluster):
+def stop_cluster(cluster, *, remove_volumes=False):
     with LOCK:
         if cluster.linked and not cluster.compose_file.exists():
             render_linked(cluster)
         validate_compose(cluster)
-        # No --volumes: databases survive switching and shutdown.
-        command([*cluster.compose, "down", "--timeout", "20"], timeout=90)
+        # Mode switches preserve data; Stop Lab explicitly requests deletion.
+        command([*cluster.compose, "down", *(["--volumes"] if remove_volumes else []),
+                 "--timeout", "20"], timeout=90)
 
 
 def clear_data(log, *, confirmed=False, cluster=LOCAL):

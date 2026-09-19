@@ -1,5 +1,7 @@
 # MongoDB consistency lab
 
+For the current app with **local and three-laptop modes**, use [linked nodes and laptop](linked%20nodes%20and%20laptop/README.md). The files at this repository's root are the older local-only lab.
+
 Three MongoDB 7 containers form replica set `rs0`. A local Streamlit dashboard provides two independent PyMongo clients, A and B. All Python dependencies live in uv's project `.venv`; no global pip installation is needed.
 
 Quick links: [first-time setup](#first-time-setup-on-a-mac) · [launch the app](#everyday-startup-double-click-the-launcher) · [technical architecture](#technical-architecture) · [how the two users are separated](#how-client-a-and-client-b-are-separated) · [experiments](#experiments) · [code map](#code-map).

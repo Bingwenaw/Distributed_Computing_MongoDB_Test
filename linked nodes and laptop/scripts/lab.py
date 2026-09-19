@@ -19,7 +19,6 @@ from pymongo.write_concern import WriteConcern
 from cluster_config import ROOT, LOCAL
 
 NODES = {node: port for node, (_, port) in LOCAL.nodes.items()}
-URI = LOCAL.uri
 ROUTES = ["primary", "secondary", "secondaryPreferred", *[f"mongo{i}" for i in range(1, 10)]]
 PROPERTIES = ["Read-your-writes", "Monotonic reads", "Monotonic writes", "Writes-follow-reads"]
 SOURCE = "https://www.mongodb.com/docs/manual/core/causal-consistency-read-write-concerns/"
@@ -130,7 +129,7 @@ class Actor:
         self.client_id, self.log = client_id, log
         self.cluster = cluster
         self.monitor = CommandLog(log, client_id)
-        self.client = MongoClient(cluster.uri, **cluster.auth, connect=False, serverSelectionTimeoutMS=4000,
+        self.client = MongoClient(cluster.uri, connect=False, serverSelectionTimeoutMS=4000,
                                  connectTimeoutMS=2000, socketTimeoutMS=8000,
                                  retryWrites=False, retryReads=False,
                                  event_listeners=[self.monitor], appname=f"lab-{client_id}")
@@ -233,7 +232,7 @@ def topology(cluster=LOCAL):
     def probe(item):
         name, (host, port) = item
         try:
-            with MongoClient(f"mongodb://{host}:{port}/?directConnection=true", **cluster.auth,
+            with MongoClient(f"mongodb://{host}:{port}/?directConnection=true",
                              serverSelectionTimeoutMS=700, connectTimeoutMS=700,
                              socketTimeoutMS=700) as client:
                 hello = client.admin.command("hello")

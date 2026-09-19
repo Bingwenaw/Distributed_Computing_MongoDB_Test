@@ -9,11 +9,11 @@ For click-by-click instructions for **A (Mac), B (Mac), and C (Windows)**, open 
 ## If you used the older version
 
 1. Everyone stops their dashboard and lab using the old copy's Stop Lab.command (Mac), or Ctrl+C then `uv run --locked scripts/shutdown.py` (Windows).
-2. Everyone updates the app files in their existing `linked nodes and laptop` folder. Keep the existing `secrets/laptop.json`, which stores the laptop letter and IP addresses. Keep all Docker volumes.
+2. Everyone updates the app files in their existing `linked nodes and laptop` folder. Keep the existing `secrets/laptop.json`, which stores the laptop letter and IP addresses.
 3. Restart everyone's dashboard. The team-file create/import/download controls should be gone.
 4. Save the correct A/B/C letter and all three IPs, check hosts-file mappings, and click Connect together.
 
-All three laptops must run this new version. Mixing it with the password-based version will fail. Old `team.json`, `member.key`, and `admin.json` files are left untouched and are no longer read or mounted. There is no need to delete them. Existing matching replica-set configurations and database volumes are reused. Old team tags are ignored; node names, hosts, votes, and ownership are still checked. The app does not force a foreign configuration or reset shared data.
+All three laptops must run this new version. Mixing it with the password-based version will fail. Old `team.json`, `member.key`, and `admin.json` files are obsolete and can be removed; only `secrets/laptop.json` is used for saved settings. The shared Compose file is generated again when needed. Existing matching replica-set configurations and database volumes are reused if they have not been deleted by Stop Lab. Old team tags are ignored; node names, hosts, votes, and ownership are still checked. The app does not force a foreign configuration or reset shared data.
 
 Run only one copy per laptop. On A, the currently used Git checkout is under **Documents/Git Hub/Distributed Computering/linked nodes and laptop**. Always launch that same copy; another folder may have different saved IP settings.
 
@@ -93,7 +93,9 @@ Secondary reads may lag. Independent laptops do not automatically share causal s
 
 Mac: double-click this folder's **Stop Lab.command**. Windows: press Ctrl+C in the dashboard PowerShell, then run `uv run --locked scripts/shutdown.py`.
 
-The stop command preserves volumes and results. It targets only this copy's Docker projects and, on Mac, dashboard processes running from this exact folder. Docker Desktop and other projects remain running.
+**Stop Lab permanently deletes all local and shared MongoDB volumes managed by this lab on this laptop. All database data in those volumes is erased.** Saved connection settings and `results/` logs remain. Everyone must run Stop Lab on their own laptop to erase the whole team's data; data left on a friend's laptop can replicate back when you reconnect. The next start creates fresh local databases.
+
+It targets only this copy's Docker projects and, on Mac, dashboard processes running from this exact folder. Docker Desktop and other projects remain running. **Disconnect** still preserves database volumes.
 
 | Resource | This standalone copy |
 | --- | --- |
@@ -122,6 +124,6 @@ uv run --locked test_linked.py
 
 These check the manual UI, setup without credentials, shared inventory and controls, bootstrap error reporting, preservation of matching old configurations, and rollback. They do not launch real lab containers. Real local integration checks are available through `test.py --integration`; `--faults` injects local faults.
 
-Optional isolated Docker check: `uv run --locked test_linked.py --docker`. It creates three temporary members on random localhost ports, checks password-free initialization and replicated writes, restarts them to verify persistence, then removes only its temporary containers and volumes. It does not use your saved laptop settings or lab databases.
+Optional isolated Docker check: `uv run --locked test_linked.py --docker`. It creates nine temporary members on three separate Docker networks with random localhost ports. It checks container-to-container connectivity, password-free initialization, three independent dashboard clients writing and reading all nine nodes, and persistence after restart. It then removes only its temporary containers and volumes. It does not use your saved laptop settings or lab databases. This simulates the three owners on one Docker Desktop installation; it cannot test your friends' firewalls or hotspot.
 
-The actual three-laptop hotspot connection remains the final hardware acceptance check. [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) retains the older design as history; this README describes current behavior.
+The actual three-laptop hotspot connection remains the final hardware acceptance check.

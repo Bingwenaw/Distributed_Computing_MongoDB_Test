@@ -9,7 +9,7 @@ Use a private hotspot you trust and test data only. Anyone who can reach the dat
 Everyone must get the updated app files first. The old and new versions cannot connect to each other.
 
 1. Stop the old dashboard: A/B use **Stop Lab.command**; C presses **Ctrl+C** in PowerShell and runs `uv run --locked scripts/shutdown.py`.
-2. Update the app in the same folder you were using. Keep your saved settings and data; there is no need to delete anything.
+2. Update the app in the same folder you were using. Keep your saved settings. The updated Stop Lab deletes database data when you run it.
 3. Restart it. **The Create/Import team file buttons should now be gone.**
 
 A: use the copy at **Documents → Git Hub → Distributed Computering → linked nodes and laptop**. Keep using that same folder each time.
@@ -203,7 +203,9 @@ Stop experiments and wait for recovery first.
 - **A/B:** double-click **Stop Lab.command** in the folder you used to start the app.
 - **C:** press **Ctrl+C** in the dashboard PowerShell, then run `uv run --locked scripts/shutdown.py`.
 
-Saved data stays. Closing the browser alone does not stop the databases. Use **Disconnect** if you want to continue with your own local lab instead. Local and shared data are separate.
+**Stop Lab deletes all local and shared database data stored by this lab on your laptop.** Your saved IP settings and experiment log files stay. A, B and C must each stop their own lab to erase the whole team's data. Otherwise a friend's remaining copy can bring shared data back when you reconnect.
+
+Closing the browser alone does not stop the databases. Use **Disconnect** if you want to keep your data and continue with your own local lab instead. Local and shared data are separate.
 
 Next time, recheck IPs, update everyone's saved address table and hosts lines if they changed, and connect together. C also updates the firewall rule if A/B's addresses changed.
 
@@ -238,8 +240,11 @@ If Mac says Start Lab.command lacks permission, open Terminal, type `cd `, drag 
 Send A the **person letter, step number, and full error message**. There are no team files to compare now.
 
 - Still seeing team-file buttons or “Waiting for authentication”? That laptop has the old app or did not fully restart it.
+- “Still requires authentication”? The error names the node and laptop running an old password-protected container. Update and restart that laptop's app from its original folder. No password entry or team file is needed.
 - “Hosts entry needed”? Save the dashboard's address lines in that laptop's hosts file.
 - Waiting for all laptops? Check everyone clicked Connect, Docker is running, and the IPs/firewall rules are correct. Some hotspots block devices from contacting one another; another hotspot/router may be needed.
+- “Cannot reach mongo…”? The error now includes the owner and port. Check that laptop first. “Cannot reach all peers from Docker” includes the failing destination; check Docker's firewall access as well as the host address mappings.
+- “Container outside this standalone folder”? The error shows both folders. Start the app from the original folder and keep using that copy. If you need to move folders, stop its containers from the original folder first. Stop Lab also deletes that copy's database data; to preserve data, close the dashboard and use `docker compose -p mongo-connect-local -f compose.local.yml down` and, if present, `docker compose -p mongo-connect-shared -f compose.linked.json down` there, without `--volumes`.
 - An unexpected existing replica set? Do not delete data. Ask for help checking its saved configuration.
 - Can't see a document? Check Connected status, matching database/collection/ID, and that the Write succeeded. A disconnected local write does not appear in shared mode.
 

@@ -13,7 +13,7 @@ from faults.control import command, stop_cluster, validate_compose
 def direct(node, cluster=LOCAL):
     host, port = cluster.nodes[node]
     return MongoClient(f"mongodb://{host}:{port}/?directConnection=true",
-                       **cluster.auth, serverSelectionTimeoutMS=1500,
+                       serverSelectionTimeoutMS=1500,
                        connectTimeoutMS=1000, socketTimeoutMS=5000)
 
 
@@ -28,7 +28,7 @@ def wait_for(check, description, seconds=90, cancel=None):
             if result:
                 return result
         except PyMongoError as exc:
-            last = type(exc).__name__
+            last = str(exc)
         if cancel is None:
             time.sleep(1)
         else:

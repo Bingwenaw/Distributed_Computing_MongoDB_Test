@@ -69,10 +69,6 @@ class Cluster:
         return "mongodb://" + ",".join(f"{host}:{port}" for host, port in self.nodes.values()) + f"/?replicaSet={self.name}"
 
     @property
-    def auth(self):
-        return {}  # Trusted-hotspot lab: no client or member authentication.
-
-    @property
     def compose_file(self):
         return ROOT / ("compose.linked.json" if self.linked else "compose.local.yml")
 

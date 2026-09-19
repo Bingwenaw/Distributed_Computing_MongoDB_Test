@@ -16,7 +16,6 @@ URI = cluster.uri
 # Create a replica-set-aware MongoDB client.
 client = MongoClient(
     URI,
-    **cluster.auth,
     serverSelectionTimeoutMS=5000,
     connectTimeoutMS=3000,
     socketTimeoutMS=10000,

@@ -1,7 +1,7 @@
 .venv/
 __pycache__/
 .DS_Store
-results/*/
+results/
 
 secrets/
 .uv-cache/
